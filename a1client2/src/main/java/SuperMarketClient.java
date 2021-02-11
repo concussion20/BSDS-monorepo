@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import multithread.CSVWriter;
@@ -32,7 +33,6 @@ public class SuperMarketClient {
     Properties prop = SuperMarketConfig.loadConfig();
     assert prop != null;
     int[] numThreadsArray = {32, 64, 128, 256};
-//    int[] numThreadsArray = {4000};
     double[] throughputs = new double[numThreadsArray.length];
     double[] means = new double[numThreadsArray.length];
 
@@ -42,7 +42,7 @@ public class SuperMarketClient {
 
       BlockingQueue<String> responses = new ArrayBlockingQueue<>(100000);
       ThreadPoolExecutor producers = (ThreadPoolExecutor) Executors.newFixedThreadPool(1000);
-      ThreadPoolExecutor consumers = (ThreadPoolExecutor) Executors.newFixedThreadPool(30);
+      ThreadPoolExecutor consumers = (ThreadPoolExecutor) Executors.newFixedThreadPool(60);
 
       int latencyLowerBarrier = Integer.parseInt(prop.getProperty(Constants.LATENCY_LOWER_BARRIER));
       int latencyUpperBarrier = Integer.parseInt(prop.getProperty(Constants.LATENCY_UPPER_BARRIER));
@@ -67,18 +67,21 @@ public class SuperMarketClient {
       AtomicInteger maxLatency = new AtomicInteger();
 
       long start = System.currentTimeMillis();
+      AtomicBoolean isPhase2Begin = new AtomicBoolean(false);
+      AtomicBoolean isPhase3Begin = new AtomicBoolean(false);
 
       // producers sending POST requests
       // phase 1
       int curStoreID = 0;
       for (int i = 1; i <= numThreads / 4; i++) {
-        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed, responses);
+        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed
+            , responses, isPhase2Begin, isPhase3Begin);
         producers.execute(task);
       }
       curStoreID += numThreads / 4;
 
       // consumers retrieving response strings
-      for (int i = 0; i < 20; i++) {
+      for (int i = 0; i < 60; i++) {
         ResponseRecordsConsumer task = new ResponseRecordsConsumer(responses, buckets, bucketLocks
             , numResponsesInBuckets, latencyLowerBarrier, latencyUpperBarrier, gap
             , meanLatency, maxLatency);
@@ -90,37 +93,33 @@ public class SuperMarketClient {
       scheduler.scheduleAtFixedRate(new CSVWriter(buckets, bucketLocks), 10, 15, TimeUnit.SECONDS);
 
       // phase 2
-      Thread.sleep(3 * 60 * 60 * 1000);
-      for (int i = 1; i <= numThreads / 4; i++) {
-        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed, responses);
-        producers.execute(task);
-      }
-      curStoreID += numThreads / 4;
-
-      for (int i = 0; i < 20; i++) {
-        ResponseRecordsConsumer task = new ResponseRecordsConsumer(responses, buckets, bucketLocks
-            , numResponsesInBuckets, latencyLowerBarrier, latencyUpperBarrier, gap
-            , meanLatency, maxLatency);
-        consumers.execute(task);
+      while (true) {
+        if (isPhase2Begin.get()) {
+          for (int i = 1; i <= numThreads / 4; i++) {
+            PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed
+               , responses, isPhase2Begin, isPhase3Begin);
+            producers.execute(task);
+          }
+          curStoreID += numThreads / 4;
+          break;
+        }
       }
 
       // phase 3
-      Thread.sleep(2 * 60 * 60 * 1000);
-      for (int i = 1; i <= numThreads / 2; i++) {
-        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed, responses);
-        producers.execute(task);
-      }
-      curStoreID += numThreads / 2;
-
-      for (int i = 0; i < 20; i++) {
-        ResponseRecordsConsumer task = new ResponseRecordsConsumer(responses, buckets, bucketLocks
-            , numResponsesInBuckets, latencyLowerBarrier, latencyUpperBarrier, gap
-            , meanLatency, maxLatency);
-        consumers.execute(task);
+      while (true) {
+        if (isPhase3Begin.get()) {
+          for (int i = 1; i <= numThreads / 2; i++) {
+            PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed
+                , responses, isPhase2Begin, isPhase3Begin);
+            producers.execute(task);
+          }
+          curStoreID += numThreads / 2;
+          break;
+        }
       }
 
       producers.shutdown();
-      producers.awaitTermination(5, TimeUnit.MINUTES);
+      producers.awaitTermination(10, TimeUnit.MINUTES);
 
       long end = System.currentTimeMillis();
       long wallTime = end - start;

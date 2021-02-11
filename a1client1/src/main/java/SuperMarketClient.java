@@ -6,6 +6,7 @@ import java.util.Properties;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import multithread.PurchaseTask;
 import util.LineCharter;
@@ -25,33 +26,46 @@ public class SuperMarketClient {
       AtomicInteger numFailed = new AtomicInteger();
 
       long start = System.currentTimeMillis();
+      AtomicBoolean isPhase2Begin = new AtomicBoolean(false);
+      AtomicBoolean isPhase3Begin = new AtomicBoolean(false);
 
       // phase 1
       int curStoreID = 0;
       for (int i = 1; i <= numThreads / 4; i++) {
-        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed);
+        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed
+            , isPhase2Begin, isPhase3Begin);
         executor.execute(task);
       }
       curStoreID += numThreads / 4;
 
       // phase 2
-      Thread.sleep(3 * 60 * 60 * 1000);
-      for (int i = 1; i <= numThreads / 4; i++) {
-        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed);
-        executor.execute(task);
+      while (true) {
+        if (isPhase2Begin.get()) {
+          for (int i = 1; i <= numThreads / 4; i++) {
+            PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed
+                , isPhase2Begin, isPhase3Begin);
+            executor.execute(task);
+          }
+          curStoreID += numThreads / 4;
+          break;
+        }
       }
-      curStoreID += numThreads / 4;
 
       // phase 3
-      Thread.sleep(2 * 60 * 60 * 1000);
-      for (int i = 1; i <= numThreads / 2; i++) {
-        PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed);
-        executor.execute(task);
+      while (true) {
+        if (isPhase3Begin.get()) {
+          for (int i = 1; i <= numThreads / 2; i++) {
+            PurchaseTask task = new PurchaseTask(prop, curStoreID + i, numReqs, numFailed
+                , isPhase2Begin, isPhase3Begin);
+            executor.execute(task);
+          }
+          curStoreID += numThreads / 2;
+          break;
+        }
       }
-      curStoreID += numThreads / 2;
 
       executor.shutdown();
-      executor.awaitTermination(5, TimeUnit.MINUTES);
+      executor.awaitTermination(10, TimeUnit.MINUTES);
 
       long end = System.currentTimeMillis();
       long wallTime = end - start;
@@ -61,6 +75,7 @@ public class SuperMarketClient {
       System.out.println("Number of sent POST requests:" + numReqs.get());
       System.out.println("Number of failed POST requests: " + numFailed.get());
       System.out.println("Throughput is: " + (numReqs.get() * 1000.0 / wallTime ));
+      System.out.println();
 
       loop++;
     }

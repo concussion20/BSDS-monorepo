@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PurchaseTask implements Runnable {
@@ -23,11 +24,16 @@ public class PurchaseTask implements Runnable {
   private Integer numItems;
   private String date;
   private String baseURL;
+  private AtomicBoolean isPhase2Begin;
+  private AtomicBoolean isPhase3Begin;
 
-  public PurchaseTask(Properties prop, Integer storeID, AtomicInteger numReqs, AtomicInteger numFailed) {
+  public PurchaseTask(Properties prop, Integer storeID, AtomicInteger numReqs, AtomicInteger numFailed
+      , AtomicBoolean isPhase2Begin, AtomicBoolean isPhase3Begin) {
     this.storeID = storeID;
     this.numReqs = numReqs;
     this.numFailed = numFailed;
+    this.isPhase2Begin = isPhase2Begin;
+    this.isPhase3Begin = isPhase3Begin;
     this.numCusts = Integer.parseInt(prop.getProperty(Constants.NUM_CUSTS));
     this.maxItemID = Integer.parseInt(prop.getProperty(Constants.MAX_ITEM_ID));
     this.numPurchases = Integer.parseInt(prop.getProperty(Constants.NUM_PURCHASES));
@@ -62,6 +68,11 @@ public class PurchaseTask implements Runnable {
   @Override
   public void run() {
     for (int i = 0; i < Constants.OPEN_HOURS * this.numPurchases; i++) {
+      if (!this.isPhase3Begin.get() && i >= Constants.PHASE3 * this.numPurchases) {
+        this.isPhase3Begin.set(true);
+      } else if (!this.isPhase2Begin.get() && i >= Constants.PHASE2 * this.numPurchases) {
+        this.isPhase2Begin.set(true);
+      }
       final ThreadLocalRandom random = ThreadLocalRandom.current();
       Integer custID = random.nextInt(this.storeID * Constants.MAX_NUM_CUSTS,
           this.storeID * Constants.MAX_NUM_CUSTS + this.numCusts);
