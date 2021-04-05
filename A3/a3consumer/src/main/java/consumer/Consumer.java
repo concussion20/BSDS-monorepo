@@ -62,7 +62,7 @@ public class Consumer implements Runnable{
       final Channel channel = this.connection.createChannel();
       channel.queueDeclare(TASK_QUEUE_NAME, false, false, false, null);
       // max one message per receiver
-      channel.basicQos(100);
+      channel.basicQos(1);
 
       DeliverCallback deliverCallback = (consumerTag, delivery) -> {
         String message = new String(delivery.getBody(), "UTF-8");

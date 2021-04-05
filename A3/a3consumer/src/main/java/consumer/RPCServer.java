@@ -73,9 +73,9 @@ public class RPCServer implements Runnable {
             .build();
 
         String itemId = new String(delivery.getBody(), "UTF-8");
-        List<Entry<String, Integer>> top5List = Store.getTop5StoresForItem(itemId);
-        String top5Json = convertEntryList2JsonString(top5List, "storeID");
-        channel2.basicPublish("", delivery.getProperties().getReplyTo(), replyProps, top5Json.getBytes("UTF-8"));
+        List<Entry<String, Integer>> top10List = Store.getTop10StoresForItem(itemId);
+        String top10Json = convertEntryList2JsonString(top10List, "storeID");
+        channel2.basicPublish("", delivery.getProperties().getReplyTo(), replyProps, top10Json.getBytes("UTF-8"));
         channel2.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
       };
 

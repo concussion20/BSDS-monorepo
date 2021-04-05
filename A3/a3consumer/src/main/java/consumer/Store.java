@@ -42,11 +42,11 @@ class Store {
     }
 
     List<Entry<String, Integer>> list = new ArrayList<>(pq);
-    Collections.reverse(list);
+    list.sort((e1, e2) -> Integer.compare(e2.getValue(), e1.getValue()));
     return list;
   }
 
-  public static List<Entry<String, Integer>> getTop5StoresForItem(String itemId) {
+  public static List<Entry<String, Integer>> getTop10StoresForItem(String itemId) {
     ConcurrentHashMap<String, Integer> itemMap = itemsSale.get(itemId);
     if (itemMap == null) {
       return null;
@@ -70,7 +70,7 @@ class Store {
     }
 
     List<Entry<String, Integer>> list = new ArrayList<>(pq);
-    Collections.reverse(list);
+    list.sort((e1, e2) -> Integer.compare(e2.getValue(), e1.getValue()));
     return list;
   }
 
